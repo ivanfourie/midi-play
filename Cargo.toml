@@ -1,0 +1,12 @@
+[package]
+name = "midi-play"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+midly = "0.5"
+cpal = "0.15"
+fluidlite = { version = "0.2", features = ["bindgen"] }
+
