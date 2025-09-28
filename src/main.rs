@@ -4,7 +4,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fluidlite::{Settings, Synth};
 use midly::{MetaMessage, Smf, TrackEventKind};
 use std::{
-    char, fs, sync::{Arc, Mutex}, thread, time::{Duration, Instant}
+    fs, sync::{Arc, Mutex}, thread, time::{Duration, Instant}
 };
 
 /// CLI options:
@@ -130,10 +130,28 @@ fn main() -> Result<()> {
             let t_us = (t_sec * 1_000_000.0) as u64;
 
             match ev.kind {
-                // Tempo changes affect future events in this track.
-                TrackEventKind::Meta(midly::MetaMessage::Tempo(tp)) => {
-                    us_per_qn = tp.as_int() as f64;
-                    timeline.push(Timed { t_us, msg: Msg::Tempo(us_per_qn) });
+                // Metadata
+                TrackEventKind::Meta(m) => {
+                    match m {
+                        // Tempo changes affect future events in this track.
+                        MetaMessage::Tempo(tp) => {
+                            us_per_qn = tp.as_int() as f64;
+                            timeline.push(Timed { t_us, msg: Msg::Tempo(us_per_qn) });
+                            println!("Tempo change at {} µs: {:.1} BPM", t_us, 60_000_000.0 / us_per_qn);
+                        }
+                        MetaMessage::TimeSignature(numer, denom, _, _) => {
+                            println!("Time signature: {}/{}", numer, 1 << denom);
+                        }
+                        MetaMessage::KeySignature(key, scale) => {
+                            println!("Key signature: {:?} ({})", key, if !scale { "major" } else { "minor" });
+                        }
+                        MetaMessage::TrackName(name) => {
+                            if let Ok(s) = std::str::from_utf8(name) {
+                                println!("Track name: {}", s);
+                            }
+                        }
+                        _ => {}
+                    }
                 }
                 // MIDI messages
                 TrackEventKind::Midi { channel, message } => {
@@ -185,6 +203,9 @@ fn main() -> Result<()> {
 
     let fl = Synth::new(settings)?;
     fl.sfload(&opt.soundfont, true).context("loading soundfont")?;
+
+    let id = fl.sfload(&opt.soundfont, true).context("loading soundfont")?;
+    println!("Loaded SoundFont: {} (id={})", opt.soundfont, id);
     
     // Master gain
     fl.set_gain(0.7);
@@ -195,7 +216,7 @@ fn main() -> Result<()> {
 
     // Chorus
     fl.set_chorus_on(true);
-    //fl.set_chorus_params(3, 1.2, 0.25, 8.0, ChorusMode::Sine);
+    fl.set_chorus_params(3, 1.2, 0.25, 8.0, Default::default()); // the default should be Sine
     
     let synth = Arc::new(Mutex::new(fl));
     
@@ -220,7 +241,7 @@ fn main() -> Result<()> {
     let fmt = cfg.sample_format();
     let stream_cfg = cfg.config();
 
-    println!("Loaded SoundFont successfully, sample rate set to {}", sample_rate);
+    println!("Sample rate set to {}", sample_rate);
 
     // 6) Start a simple "conductor" thread.
     // It schedules MIDI events in wall-clock time and sends them to the synth.

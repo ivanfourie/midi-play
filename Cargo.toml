@@ -8,5 +8,5 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 midly = "0.5"
 cpal = "0.15"
-fluidlite = { version = "0.2", features = ["bindgen"] }
+fluidlite = { version = "0.2.1", features = ["bindgen"] }
 
