@@ -56,14 +56,59 @@ fn main() -> Result<()> {
     // 3) Build a single timeline of timestamped events.
     // We convert each track’s delta ticks to absolute time in microseconds, then merge.
     #[derive(Clone, Copy)]
+    /// Represents a MIDI message extracted from the timeline.
+    ///
+    /// Each variant corresponds to a MIDI event type.
+    /// Fields follow the MIDI message structure:
+    /// - First parameter is usually the channel (0–15)
+    /// - Subsequent parameters depend on the event type
     enum Msg {
+        /// Note On: Start playing a note.
+        /// - channel: 0–15
+        /// - key: MIDI note number (0–127)
+        /// - velocity: 0–127
         NoteOn(u8, u8, u8),
+
+        /// Note Off: Stop playing a note.
+        /// - channel: 0–15
+        /// - key: MIDI note number (0–127)
+        /// - velocity: release velocity (0–127, often unused)
         NoteOff(u8, u8, u8),
+
+        /// Program Change: Change the program (also known as instrument) for a channel.
+        /// - channel: 0–15
+        /// - program: instrument/patch number (0–127)
         Program(u8, u8),
+
+        /// Control: Modify the value of a MIDI controller.
+        /// - channel: 0–15
+        /// - controller: controller number (0–127)
+        /// - value: controller value (0–127)
         Control(u8, u8, u8),
-        PitchBend(u8, u16), // channel, bend value
+
+        /// Pitch Bend: Set the pitch bend value for the entire channel.
+        /// - channel: 0–15
+        /// - bend value: 14-bit signed value, 0–16383
+        ///   - center (no bend) = 8192
+        ///   - <8192 = bend down, >8192 = bend up
+        PitchBend(u8, u16),
+
+        /// Aftertouch (Polyphonic): Modify the velocity of a note after it has been played.
+        /// - channel: 0–15
+        /// - key: MIDI note number (0–127)
+        /// - velocity: 0–127, The velocity of the key
+        AfterTouch(u8, u8, u8),
+
+        /// ChannelAftertouch: Change the note velocity of a whole channel at once, without starting new notes.
+        /// - channel: 0–15
+        /// - pressure: 0–127
+        ChannelAftertouch(u8, u8),
+
+        /// Tempo change: (microseconds per quarter note)
+        /// - value is in µs per quarter note (not BPM)
+        /// - To convert to BPM: bpm = 60_000_000 / value
         #[allow(dead_code)]
-        Tempo(f64), // new microseconds per quarter note
+        Tempo(f64),
     }
     
     #[derive(Clone, Copy)]
@@ -93,7 +138,7 @@ fn main() -> Result<()> {
                     us_per_qn = tp.as_int() as f64;
                     timeline.push(Timed { t_us, msg: Msg::Tempo(us_per_qn) });
                 }
-                // Basic MIDI messages we support for this demo.
+                // MIDI messages supported.
                 TrackEventKind::Midi { channel, message } => {
                     let ch = u8::from(channel);
                     use midly::MidiMessage::*;
@@ -119,12 +164,11 @@ fn main() -> Result<()> {
                             timeline.push(Timed { t_us, msg: Msg::PitchBend(ch, raw) });
                         }
                         Aftertouch { key, vel } => {
-                            println!("Aftertouch not supported yet.");    
+                            timeline.push(Timed { t_us, msg: Msg::AfterTouch(ch, key.as_int(), vel.as_int()) }); 
                         }
                         ChannelAftertouch { vel } => {
-                            println!("ChannelAftertouch not supported yet.");
+                            timeline.push(Timed { t_us, msg: Msg::ChannelAftertouch(ch, vel.as_int()) });
                         }
-                        _ => {} // ignore others in this minimal player
                     }
                 }
                 _ => {}
@@ -202,6 +246,12 @@ fn main() -> Result<()> {
                         } else {
                             let _ = s.pitch_bend(ch as u32, bend as u32);
                         }
+                    }
+                    Msg::AfterTouch(ch, key, vel) => {
+                        let _ = s.key_pressure(ch as u32, key as u32, vel as u32);
+                    }
+                    Msg::ChannelAftertouch(ch, vel) => {
+                        let _ = s.channel_pressure(ch as u32, vel as u32);
                     }
                     Msg::Tempo(_) => {
                         // Timeline already has absolute times, so no rescale is needed here.

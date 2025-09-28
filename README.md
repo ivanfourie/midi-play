@@ -68,7 +68,6 @@ Any General MIDI .sf2 will work. Popular choices:
 Good next steps:
 
 * Sustain pedal: handle CC 64 in the conductor and forward to `synth.cc`.
-* Pitch bend: forward `PitchBend { bend }` to `synth.pitch_bend`.
 * Per-track channel mapping: MIDI files often assume channel programs. Preserve per-channel instruments and volumes.
 * Looping: detect end-of-timeline and restart by resetting state with `system_reset` and re-scheduling.
 * Accurate scheduling: replace the simple sleep(1 ms) with a small ring buffer of events and a tighter tick, or use a high precision timer.
