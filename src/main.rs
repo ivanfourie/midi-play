@@ -216,7 +216,7 @@ fn main() -> Result<()> {
 
     // Chorus
     fl.set_chorus_on(true);
-    fl.set_chorus_params(3, 1.2, 0.25, 8.0, Default::default()); // the default should be Sine
+    fl.set_chorus_params(3, 1.2, 0.30, 8.0, Default::default()); // the default should be Sine
     
     let synth = Arc::new(Mutex::new(fl));
     
