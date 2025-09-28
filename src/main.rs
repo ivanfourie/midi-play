@@ -2,12 +2,9 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fluidlite::{Settings, Synth};
-use midly::{Smf, TrackEventKind};
+use midly::{MetaMessage, Smf, TrackEventKind};
 use std::{
-    fs,
-    sync::{Arc, Mutex},
-    thread,
-    time::{Duration, Instant},
+    char, fs, sync::{Arc, Mutex}, thread, time::{Duration, Instant}
 };
 
 /// CLI options:
@@ -138,7 +135,7 @@ fn main() -> Result<()> {
                     us_per_qn = tp.as_int() as f64;
                     timeline.push(Timed { t_us, msg: Msg::Tempo(us_per_qn) });
                 }
-                // MIDI messages supported.
+                // MIDI messages
                 TrackEventKind::Midi { channel, message } => {
                     let ch = u8::from(channel);
                     use midly::MidiMessage::*;
@@ -185,10 +182,23 @@ fn main() -> Result<()> {
 
     // 4) Create a FluidLite synth, load the SoundFont, and share it across threads.
     let settings = Settings::new()?;
+
     let fl = Synth::new(settings)?;
     fl.sfload(&opt.soundfont, true).context("loading soundfont")?;
-    let synth = Arc::new(Mutex::new(fl));
+    
+    // Master gain
+    fl.set_gain(0.7);
 
+    // Reverb
+    fl.set_reverb_on(true);
+    fl.set_reverb_params(0.7, 0.2, 0.9, 0.5); // roomsize, damp, width, level
+
+    // Chorus
+    fl.set_chorus_on(true);
+    //fl.set_chorus_params(3, 1.2, 0.25, 8.0, ChorusMode::Sine);
+    
+    let synth = Arc::new(Mutex::new(fl));
+    
     // 5) Set up audio output with CPAL and let FluidLite fill the audio buffers.
     let host = cpal::default_host();
     let dev = host.default_output_device().context("no default output device")?;
