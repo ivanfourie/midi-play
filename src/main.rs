@@ -61,9 +61,11 @@ fn main() -> Result<()> {
         NoteOff(u8, u8, u8),
         Program(u8, u8),
         Control(u8, u8, u8),
+        PitchBend(u8, u16), // channel, bend value
         #[allow(dead_code)]
         Tempo(f64), // new microseconds per quarter note
     }
+    
     #[derive(Clone, Copy)]
     struct Timed {
         t_us: u64, // absolute time in microseconds since start
@@ -96,6 +98,10 @@ fn main() -> Result<()> {
                     let ch = u8::from(channel);
                     use midly::MidiMessage::*;
                     match message {
+                        NoteOn { key, vel } if vel.as_int() == 0 => {
+                            // normalize to NoteOff to avoid any synth-specific ambiguity
+                            timeline.push(Timed { t_us, msg: Msg::NoteOff(ch, key.as_int(), 0) });
+                        }
                         NoteOn { key, vel } => {
                             timeline.push(Timed { t_us, msg: Msg::NoteOn(ch, key.as_int(), vel.as_int()) });
                         }
@@ -107,6 +113,16 @@ fn main() -> Result<()> {
                         }
                         Controller { controller, value } => {
                             timeline.push(Timed { t_us, msg: Msg::Control(ch, controller.as_int(), value.as_int()) });
+                        }
+                        PitchBend { bend } => {
+                            let raw = bend.0.as_int(); 
+                            timeline.push(Timed { t_us, msg: Msg::PitchBend(ch, raw) });
+                        }
+                        Aftertouch { key, vel } => {
+                            println!("Aftertouch not supported yet.");    
+                        }
+                        ChannelAftertouch { vel } => {
+                            println!("ChannelAftertouch not supported yet.");
                         }
                         _ => {} // ignore others in this minimal player
                     }
@@ -139,6 +155,13 @@ fn main() -> Result<()> {
     {
         let s = synth.lock().unwrap();
         s.set_sample_rate(sample_rate);
+
+        // clean start
+        for ch in 0..16u32 {
+            let _ = s.pitch_bend(ch, 8192); // center
+            let _ = s.cc(ch, 121, 0);       // Reset All Controllers
+            let _ = s.cc(ch, 120, 0);       // All Sound Off (optional)
+        }
     }
     let fmt = cfg.sample_format();
     let stream_cfg = cfg.config();
@@ -172,6 +195,13 @@ fn main() -> Result<()> {
                     }
                     Msg::Control(ch, cc, val) => {
                         let _ = s.cc(ch as u32, cc as u32, val as u32);
+                    }
+                    Msg::PitchBend(ch, bend) => {
+                        if bend > 16383 {
+                            eprintln!("Dropping out-of-range raw bend {}", bend);
+                        } else {
+                            let _ = s.pitch_bend(ch as u32, bend as u32);
+                        }
                     }
                     Msg::Tempo(_) => {
                         // Timeline already has absolute times, so no rescale is needed here.
